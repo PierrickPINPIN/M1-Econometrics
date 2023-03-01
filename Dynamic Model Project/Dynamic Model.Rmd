@@ -1,0 +1,1142 @@
+---
+title: "Time Series & Econometrics"
+subtitle: "TD5"
+author: "Pierrick PINPIN"
+output: 
+  rmdformats::readthedown:
+    highlight: kate
+---
+
+# *Part 1 : Warm up - Data settings and unit root tests*
+
+## *Exercise 1 : Data settings*
+
+### 1. Data importation can be automated using R features and packages. There exists several API facilitating economic and financial import and update. Load the Advance Retail Sales - namely the Retail Trade from the Federal Reserve of Saint Louis ?
+```{r message=FALSE, warning=FALSE}
+library(eFRED)
+rs <- fred("RSXFSN", all= FALSE)
+head(rs)
+```
+
+
+
+### 2. Check the status of the imported data and transform it into a right object if necessary. Plot the data. What do you observe ? What type of seasonal pattern is ? What type of the filters do you propose to clean the retail sales.
+```{r}
+sapply(rs, typeof)
+```
+```{r}
+str(rs)
+```
+>We can see that the data is clean and usable.
+
+```{r}
+rs.ts <- ts(rs$RSXFSN, start= c(1992, 01), frequency= 12)
+ts.plot(rs.ts, main= "Retail Trade from the Federal Reserve of Saint Louis")
+```
+>We can see a slight increase and a strong seasonality on the Advance Retail Sales. Moreover, the trend seems to be deterministic. However, there is no evidence of cyclic behavior.
+>We can recognize an additive model because there is a constant seasonal factor. Indeed, the seasonal factor is too slightly increasing to be considered as a multiplicative model.
+>We can use the moving average filter, ordinary least squares (dummies) or differentiation to neutralize seasonality.
+
+### 3. Run the required filter to cut the seasonal pattern ? You can choose between the seasonal regression, the moving average filter and the decompose function (this function is based on moving average seasonal filters as well).
+```{r}
+dec.rs <- decompose(rs.ts) 
+plot(dec.rs)
+```
+
+### 4. Grab the filtered data and check using the right tool the seasonal pattern has been deleted. Is this filtered data be modeled using an ARMA(p,q) approach ?
+```{r message=FALSE, warning=FALSE}
+library(forecast)
+wsea.rs <- seasadj(dec.rs)
+plot(wsea.rs)
+```
+```{r}
+plot(decompose(wsea.rs))
+```
+
+>We can observe that the series seems purged of its seasonality. Indeed, e can observe too slight a seasonality to consider it as such (order of magnitude: 10^(-11)). In addition, we can now observe the trend and the noise of the time series. This trend implies a non-stationarity of the time series and thus an impossibility to model the Retail Sales time series by an ARMA(p,q).
+
+
+
+## *Exercise 2 : Unit Root tests*
+
+We can notice the seasonally adjusted data (or the filtered one) is still showing an upward trend. We need to characterize this positive trend, i.e. whether it is a trend stationary or a stochastic trend.
+
+### 1. Load the "urca" package. Summarize quickly the step-wise approach of the Dickey Fuller test.
+Compute the Augmented Dickey Fuller test using the right function on the filtered data (note that
+the selection of the number of lags can be performed on a discretionary way or automatically).
+
+>The DF (Dickey Fuller 1979) and ADF (Augmented Dickey Fuller 1981) tests are unit root tests to test the stationarity of the time series. The difference is that ADF takes into account the autocorrelation of the estimated residuals and a data generating process.
+We are interested in the ADF, which is the following model: 
+∆yt = β1 + β2t + πyt−1 + ∑ γi∆t−i + ut
+
+>We test two hypotheses:
+- H0: π=0
+- H1: π<0
+If we reject H0, then there is no unit root which implies that the time series is not stationary. Conversely, if we do not reject H0, there is a unit root which implies that the process is stationary (according to our confidence interval).
+
+>The ADF test follows a step-by-step process: 
+∆yt = β1 + β2t + πyt−1 + ∑ γi∆t−i + ut
+Step 1: Test if π=0. If not, end of test and there is no unit root. If yes, go to step 2.
+Step 2: Test if β2=0. If no, end of test and there is a unit root. If yes, change the model:
+∆yt = β1 + πyt−1 + ∑ γi∆t−i + ut
+Step 3: Test if π=0. If no, end of test and there is no unit root. If yes, go to step 4.
+Step 4: Test if β1=0. If no, end of test and there is a unit root. If yes, change the model:
+∆yt = πyt-1 + ∑ γi∆t-i + ut
+Step 5: Test if π=0. If no, there is finally no unit root and if yes, there is finally a unit root.
+
+>Let's start by performing the ADF test manually:
+For a lag= 1 and type= "trend" because we can observe one, we have:
+
+```{r}
+library(urca)
+ADF1t <- ur.df(wsea.rs, type= "trend", lag= 1)
+summary(ADF1t)
+```
+>We can see that 1 lag is significant. Let's test with lag= 2:
+
+```{r}
+ADF2t <- ur.df(wsea.rs, type= "trend", lag= 2)
+summary(ADF2t)
+```
+>We can see that 2 lags are significant. Let's test with lag= 3:
+
+```{r}
+ADF3t <- ur.df(wsea.rs, type= "trend", lag= 3)
+summary(ADF3t)
+```
+>We can see that only 2 lags are significant. Let's now analyze the output of the ADF test:
+
+>The p-value is obtained is equal to 2.054e-13 which is really lower than significance level of 0.05 so it is statically significance and:
+- tau3 represents the null hypothesis for π=0 and β1=0. The 1st ADF statistic is equal to -0.5838 which is higher than all the associated critical values (-3.98 -3.42 -3.13). So we reject H0 (at a 1% risk). Then, π!=0 and β1!=0.
+- phi2 represents the null hypothesis for π=0, β1=0 and β2=0. The 2nd ADF statistic is equal to 5.4489 which is higher than the two last associated critical values (4.71  4.05) and lower than the first associated critical value (6.15). So we reject H0 at a 5% risk and we do not reject H0 at a 1% risk. So for a confidence interval of 95%, π!=0, β1!=0 and β2!=0. But for a confidence interval of 95%, π=0, β1=0 and β2=0. So the time series is 99% non-stationary.
+- phi3 represents the null hypothesis for: π=0 and β2= 0. Here, the Value of test-statistic= 1.5433  which is lower than all the associated critical values (8.34  6.30  5.36). So we do not reject H0. So, π!=0 and β2!=0.
+
+### 2. Determine then the integration degree of the data ?
+>The degree of integration of a series corresponds to the number of times a differentiation filter is applied to stationarize it.
+So, let's apply the filter once:
+
+```{r}
+dt1.rs <- diff(wsea.rs)
+summary(ur.df(dt1.rs, type= "trend", lags= 1))
+```
+>The p-value is obtained is equal to 2.054e-13 which is really lower than significance level of 0.05 so it is statically significance and:
+The 1st ADF statistic is equal to -21.1115 which is lower than all the associated critical values (-3.98 -3.42 -3.13). So we reject H0.
+The 2nd ADF statistic is equal to 148.5868 which is much higer than the associated critical values. So we do not reject H0.
+The 3rd ADF statistic is equal to 222.87. which is much higer than the associated critical values. So we do not reject H0.
+Then the series is stationary because there is no unit root.
+So we deduce that the degree of integration is 1: yt~I(1).
+
+### 3. Compute the Phillips and Perron test on the filtered data. Does it confirm your previous result ?
+>We choose model= "trend" beacause there is a trend.
+>∆yt = βt + πyt−1 + ∑ γi∆t−i + ut
+
+```{r}
+PP <- ur.pp(wsea.rs, type= "Z-tau", model= "trend", use.lag= 1)
+summary(PP)
+```
+
+>The Phillips and Perron test differs from the Dickey-Fuller test because it is non-parametric.
+We can see that the Value of test-statistic= -3.0309 which is higher than all the critical values. The observed deviation of the data from the null hypothesis is statistically significant. So, we reject the null hypothesis. So, the time series is not stationary.
+
+```{r}
+summary(ur.pp(dt1.rs, type= "Z-tau", model= "trend", use.lag= 1))
+```
+>We can see that the Value of test-statistic= -25.9201 which is lower than all the critical values. So, we do not reject the null hypothesis. So, the time series is stationary. 
+
+### 4. Compute the KPSS test using one of the artificial data generated previously. Do we find the same conclusion ?
+>We choose type= "tau" beacause there is a trend.
+>∆yt = πyt−1 + ut
+
+```{r}
+KPSS <- ur.kpss(wsea.rs, type= "tau", use.lag= 1)
+summary(KPSS)
+```
+>As the Phillips and Perron test, this is a non-parametric test.
+We can see that the Value of test-statistic= 1.4646 which is higher than a all the critical values. The observed deviation of the data from the null hypothesis is statistically significant. So, we reject the null hypothesis. So, as the last test the time series is not stationary.
+
+### 5. Find the degree of integration of the US retail sales using the KPSS test. Does it validates the previous result ?
+>Let's test it for 1 difference:
+
+```{r}
+KPSS1 <- ur.kpss(dt1.rs, type= "tau", use.lag= 1)
+summary(KPSS1)
+```
+>We can see that the Value of test-statistic= 0.0355 which is lower than a all the critical values. So, we can't reject the null hypothesis. So, as the last test the time series is stationary.
+So, as before the degree of integration is 1: yt~I(1).
+For all tests we find a degree of integration of order 1 (although ADF suggests that order 2 is better), we choose that only 1 differentiation is sufficient.
+
+```{r}
+dt2.rs <- diff(wsea.rs, differences= 2)
+plot(decompose(dt2.rs))
+```
+
+
+## *Exercise 3 : Modeling*
+
+### 1. Given the results derived from the previous sections, propose the most relevant ARMA(p,q) framework to model the retail sales dynamics. Is there an alternative to the ARMA(p,d) approach ?
+>Thanks to the decompose function, we have extracted the seasonality from the time series and thanks to the first order differentiation, we have made our series stationary, thus purged of its trend. So, we can model it by an ARMA(p,q) model. Let's look for p and q: 
+
+```{r}
+rsaic <- matrix(nrow= 5, ncol= 5)
+rsbic <- matrix(nrow= 5, ncol= 5)
+
+for(p in seq(5))
+{
+  for(q in seq(5))
+  {
+    rsaic[p,q] <- arima(dt1.rs, order= c(p, 0, q))$aic
+    rsbic[p,q] <- BIC(arima(dt1.rs, order= c(p, 0, q)))
+  }
+}
+paic <- which(rsaic == min(rsaic), arr.ind=TRUE)[1]
+qaic <- which(rsaic == min(rsaic), arr.ind=TRUE)[2]
+
+pbic <- which(rsbic == min(rsbic), arr.ind=TRUE)[1]
+qbic <- which(rsbic == min(rsbic), arr.ind=TRUE)[2]
+
+cat("\n With AIC:")
+cat("\n The value of p is:", paic)
+cat("\n The value of q is:", qaic)
+cat("\n The corresponding AIC value is:", min(rsaic))
+
+cat("\n With BIC:")
+cat("\n The value of p is:", pbic)
+cat("\n The value of q is:", qbic)
+cat("\n The corresponding BIC value is:", min(rsbic))
+```
+>We can see that according to the AIC and BIC criteria, the appropriate model to model the time series is the ARMA(4, 4) model. Let's have a look and check afterwards:
+
+```{r}
+fit <- arima(dt1.rs, order= c(4,0,4))
+plot(dt1.rs, col= "blue", main= "Retail sales data (in blue) versus data estimated with an ARMA(4, 4)")
+lines(fitted(fit), col= "red")
+```
+>Let's try with the automatic method, but we won't take it into account for the following:
+
+```{r}
+fita <- auto.arima(dt1.rs)
+cat("The value of p is:", fita$arma[1])
+cat("\nThe value of q is:", fita$arma[2])
+cat("\nWe have an ARMA(", fita$arma[1], ",", fita$arma[2],")")
+cat("\nThe corresponding AIC value is:", fita$aic)
+cat("\nThe corresponding BIC value is:", BIC(fita))
+```
+>Let's draw the graph of the Retail sales data versus data estimated with an ARMA(1, 2):
+
+```{r}
+plot(dt1.rs, col= "blue", main= "Retail sales data (in blue) versus data estimated with an ARMA(4, 4)")
+lines(fitted(fita), col= "red")
+```
+>We notice that it is difficult to recognize graphically which model fits the data best. However, by comparing the AIC and the BIC, we observe that the ARMA(4,4) model is better than the model found automatically.
+>Yes, there are several alternatives to the ARMA model for time series analysis. There is the ARIMA model for modeling a non-stationary series by specifying the degree of integration (the order of differentiation to station the time series). The SARIMA model also exists and takes into account the seasonality of the data.
+
+### 2. Having choose the correct specification, justify the relevance of your choice with the required tests.
+
+>Let's perform the different quality tests of the estimated model:
+Let's start by looking at the significance of the coefficients:
+
+```{r}
+summary(fit)
+```
+```{r}
+cat("p-values of all the coefficients for ARMA(4,4): \n")
+round((1-pnorm(abs(fit$coef)/sqrt(diag(fit$var.coef))))*2, 4)
+```
+>We can see that the coefficient ma1 is higher than 0.05 (the significance level). So we can conclude that the coefficient ma1 is not significant. All other coefficients have a p-value less than 0.05. Therefore they are significant.
+
+>Let's check that the model correctly predicts the future values of the time series. To do this, we can use the following metrics:
+- The coefficient of determination (R²) 
+- The root mean square error (RMSE). Here, our data have the same scale so we can use the MSE.
+
+>R²:
+
+```{r}
+R2 <- function(model, data) {
+
+  predictions <- forecast(model, h = length(model$residuals))$mean
+  residuals_variance <- var(model$residuals)
+  data_variance <- var(data)
+  r_squared <- 1 - (residuals_variance / data_variance)
+
+  return(r_squared)
+}
+```
+
+```{r}
+rsquared <- R2(fit, dt1.rs)
+print(rsquared)
+```
+>With the automatic method:
+
+```{r}
+rsquared <- R2(fita, dt1.rs)
+print(rsquared)
+```
+>The higher the coefficient of determination, the better the model is able to predict the data. Here, we obtain a rather low value: R²= 0.2777328. However, it is impossible to conclude on the quality of the model with this value alone: it depends on several factors. It is important to note that R² is not always a reliable indicator of the quality of the model, especially in cases where the data are noisy or contain anomalies. Here, this may explain the low value obtained. Let's continue the analysis with the RMSE:
+
+```{r}
+Same_time <- function(ts1, ts2){ #Returns the modified ts2 time series
+  
+  ts1_time <- time(ts1)
+  ts2_time <- time(ts2)
+  
+  ts1_start <- start(ts1)
+  ts2_start <- start(ts2)
+  ts2 <- ts(ts2, start = ts1_start, end = end(ts1), frequency = frequency(ts1))
+  return(ts2)
+}
+```
+
+```{r}
+RMSE <- function(arima_model, data) {
+  
+  pred <- forecast(arima_model, h = length(arima_model$residuals))$mean
+  predictions <- Same_time(data, pred)
+  errors <- predictions - data
+  rmse <- sqrt(mean(errors^2))
+
+  return(rmse)
+}
+```
+
+```{r}
+rmse <- RMSE(fit, dt1.rs)
+print(rmse)
+```
+>With the automatic method:
+
+```{r}
+rmse <- RMSE(fita, dt1.rs)
+print(rmse)
+```
+>We obtain RMSE= 11956.18 which may seem high. The lower the RMSE value, the better the model. However, as before, this single metric is not enough to conclude about the model. Let's now analyze the estimated residuals:
+
+```{r}
+qqnorm(fit$residuals)
+qqline(fit$residuals)
+```
+```{r}
+mean(fit$residuals)
+```
+>We observe on the graph that our residuals are normally distributed. Moreover, the expectation is close to 0 (compared to the scale of values). So we can conclude that the estimated residuals are white noise.
+
+>With the automatic method:
+
+```{r}
+qqnorm(fita$residuals)
+qqline(fita$residuals)
+```
+```{r}
+mean(fita$residuals)
+```
+>Let us now check the autocorrelation of the estimated residuals:
+
+```{r}
+par(mfrow= c(1,2))
+acf(fit$residuals)
+pacf(fit$residuals)
+```
+>With these two graphs, we can see that the residuals are not autocorrelated. Let's check this with a Ljung Box test:
+
+```{r}
+Q_yt= matrix(data = 0, ncol= 2, nrow= 10)
+
+for(i in 1:10)
+{
+  Q_yt[i, 1]= Box.test(fit$residuals, lag= i, type= 'Ljung')$statistic
+  Q_yt[i,2]= Box.test(fit$residuals, lag= i, type= 'Ljung')$p.value
+  
+}
+plot(Q_yt[,2], main= "P-values of the Ljung Boxtest")
+```
+
+>We can observe that all our p-values are above the 0.05 threshold. Therefore, the residuals of the ARMA(4,4) model are not significantly different from an independent data set. Thus, the residuals are indeed without autocorrelation. Let us now check the stationarity:
+
+```{r}
+ADFr <- ur.df(fit$residuals)
+summary(ADFr)
+```
+>We can see that we have: Value of test-statistic= -13.7683  is lower than the associated critical values (-2.58 -1.95 -1.62). Thus the series of estimated residuals are stationary. Moreover, we had seen that the residuals are normally distributed. Thus, we can deduce that the variance is constant over time.
+
+>Then, we can conclude by saying that the ARMA(4,4) model is a good model for estimating our retail sales data, according to our different metrics. We can therefore use this model to predict data.
+
+```{r}
+fore <- forecast(fit, h= 3) #3 months predictions
+plot(fore)
+```
+
+## *Exercise 4 : Estimating an ARIMA(p,d,q)*
+
+>As seen during the class, ARIMA model were designed to deal with non stationary time series. We propose to use this kind of specification to model the Johnson & Johnson stock price from 1997 until now, on a monthly basis. Prior moving to the stock price modeling, we nee to load the data from yahoo finance website. To do so, run the following code:
+
+```{r}
+library(tidyquant)
+jnj = tq_get("JNJ", get= "stock.prices", from ="1997-01-01")
+jnj <- tq_transmute(jnj, mutate_fun= to.period, period= "months")
+head(jnj)
+```
+
+>We choose the close as "stock price".
+
+```{r}
+plot(jnj$date, jnj$close, type= 'l', main= "Johnson & Johnson stock price from 1997 until now")
+```
+
+```{r}
+ts.jnj <- ts(jnj$close, start= c(1997, 01, 31), frequency= 12)
+```
+
+### 1. Determine the degree of integration of the Johnson & Johnson stock prices.
+
+>We are looking for the degree of integration of the Johnson & Johnson stock prices. So we are looking for the order of the difference filter to apply in order to make the series stationary.
+
+```{r}
+dec.jnj <- decompose(ts.jnj)
+plot(dec.jnj)
+```
+>We can observe what seems to be a seasonality. To be conservative, we first purge the time series of its assumed seasonality.
+
+```{r warning=FALSE}
+library(forecast)
+wsea.jnj <- seasadj(dec.jnj)
+plot(wsea.jnj)
+```
+>As expected, the series seems to be the same as before. Thus, the suspected seasonality was not strong enough to affect the time series.As expected, the series seems to be the same as before. Thus, the suspected seasonality was not strong enough to affect the time series. Moreover, we can see a trend.
+Let's proceed to the stationarity tests:
+
+```{r}
+library(urca)
+ADF1t <- ur.df(wsea.jnj, type= "trend", lag= 1)
+summary(ADF1t)
+```
+>lag= 1, is not significant and we can see a p-value higher than 0.05 our confidence level. So, let's do it for lag= 2:
+
+```{r}
+ADF2t <- ur.df(wsea.jnj, type= "trend", lag= 2)
+summary(ADF2t)
+```
+>The p-value is lower than our confidence level and the significance of the lag 2 is only of 2 stars. Let's do the same test for lag= 3:
+
+```{r}
+ADF3t <- ur.df(wsea.jnj, type= "trend", lag= 3)
+summary(ADF3t)
+```
+>We see that only lag 2 is significant. The p-value is below our confidence interval and:
+We observe that the first test statistic is higher than the associated critical values.The data are far enough from what one would expect if the null hypothesis were true to conclude that the null hypothesis is incorrect. So we reject the null hypothesis. 
+We observe that the 2nd test statistic is below the critical values. So we do not reject the null hypothesis.
+We observe that the 3rd test statistic is below the critical values. So we do not reject the null hypothesis. 
+According to the different steps of the ADF test, the series is not stationary.
+
+>Let's apply the difference filter 1 time:
+
+```{r}
+d1.jnj <- diff(wsea.jnj, differences= 1)
+ADF3t <- ur.df(d1.jnj, type= "trend", lag= 3)
+summary(ADF3t)
+```
+>We observe that the first test statistic is below the critical values. We therefore do not reject the null hypothesis. Then π=0 and β1=0.
+The second test statistic is above the associated critical values. The data are far enough from what would be expected if the null hypothesis were true to conclude that the null hypothesis is incorrect. We therefore reject the null hypothesis. Then: π!=0, β1!=0 and β2!=0.
+The same for the third statistic value. So, π!=0 and β2!= 0. So, the time series is stationary.
+
+>We can suppose that the degree of integration of the Johnson & Johnson stock prices is 1. Let's check for Phillips-Perron test and KPSS test:
+
+>Philipps-Perron:
+
+```{r}
+PPt <- ur.pp(d1.jnj, type= "Z-tau", model= "trend", use.lag= 3)
+summary(PPt)
+```
+>Our p-value is higher than 0.05. So, there is insufficient evidence to reject the null hypothesis that the time series in question is stationary. Let's check the stationarity of the series with other tests.
+
+>KPSS:
+
+```{r}
+KPSSt <- ur.kpss(d1.jnj, type= "tau", use.lag= 3)
+summary(KPSSt)
+```
+>We can see that the value of test-statistic is below the associated critical values. So, we do not reject the null hypothesis. Hence, the time series is stationary.
+
+>So according to the different tests, the first order difference filter is sufficient to make the series stationary. So we can conclude that the order of integration of the stock prices of Johnson & Johnson is 1: yt~I(1).
+
+### 2. Determine the order of the ARIMA model, i.e the values of p, d, q to be used to model the stock prices. Note first, the assessment of p and q cannot be performed on the data expressed in level. Note besides, the determination of the values of p and q can be performed using different methods (graphical approach vs information criteria).
+
+>From the previous question, we know that d= 1. Let us determine p and q:
+
+```{r}
+BestARIMA <- function(data, criterion, d, arstat) {
+  bestAIC <- Inf
+  bestBIC <- Inf
+  bestCriterion <- Inf
+  bestP <- -1
+  bestQ <- -1
+  
+  for (p in 0:5) {
+    for (q in 0:5) {
+      
+      if (arstat== TRUE){
+        fit <- arima(data, order=c(p, d, q), method = "ML")
+      }
+      
+      else{
+        fit <- arima(data, order=c(p, d, q))
+      }
+      
+      
+      if (criterion == "aic" && fit$aic < bestAIC) {
+        bestAIC <- fit$aic
+        bestCriterion <- bestAIC
+        bestP <- p
+        bestQ <- q
+      }
+      
+      if (criterion == "bic" && BIC(fit) < bestBIC) {
+        bestBIC <- BIC(fit)
+        bestCriterion <- bestBIC
+        bestP <- p
+        bestQ <- q
+      }
+    }
+  }
+  
+  return(list(bestP, bestQ, bestCriterion))
+}
+```
+
+```{r warning=FALSE}
+bestpqa <- BestARIMA(d1.jnj, "aic", 1, FALSE)
+bestpqb <- BestARIMA(d1.jnj, "bic", 1, FALSE)
+
+cat("\n With AIC:")
+cat("\n The value of p is:")
+print(bestpqa[1])
+cat("\n The value of q is:")
+print(bestpqa[2])
+cat("\n The corresponding AIC value is:")
+print(bestpqa[3])
+
+cat("\n With BIC:")
+cat("\n The value of p is:")
+print(bestpqb[1])
+cat("\n The value of q is:")
+print(bestpqb[2])
+cat("\n The corresponding BIC value is:")
+print(bestpqb[3])
+```
+>According to the AIC, we should choose an ARIMA(5,1,5) and according to the BIC, we should choose an ARIMA(0,1,3).
+
+### 3. Estimate the corresponding ARIMA(p,d,q) model to the values of p,d,q selected previously. Check the estimated coefficients and compute the fit of the model. Plot (within the same chart) the estimated values of the stock price and the observed one.
+
+>According to the AIC:
+
+```{r}
+fita <- arima(d1.jnj, order=c(5, 1, 5))
+summary(fita)
+```
+
+```{r}
+cat("p-values of all the coefficients for ARIMA(5, 1, 5): \n")
+round((1-pnorm(abs(fita$coef)/sqrt(diag(fita$var.coef))))*2, 4)
+```
+>We can see that the p-values of the coefficients ar3, ma1, ma4 are greater than 0.05 (the level of significance). We can therefore conclude that these coefficients are not significant. All the other coefficients have a p-value lower than 0.05. They are therefore significant.
+
+```{r}
+plot(d1.jnj, col= "blue", main= " Johnson & Johnson stock prices (in blue) versus prices estimated with an ARIMA(5, 1, 5)")
+lines(fitted(fita), col= "red")
+```
+
+
+>According to the BIC:
+
+```{r}
+fitb <- arima(d1.jnj, order=c(0, 1, 3))
+summary(fitb)
+```
+```{r}
+cat("p-values of all the coefficients for ARIMA(0, 1, 3): \n")
+round((1-pnorm(abs(fitb$coef)/sqrt(diag(fitb$var.coef))))*2, 4)
+```
+>We can see that the p-value of the coefficient ma2 is higher than 0.05 (the significance level). So we can conclude that the coefficient ma2 is not significant. All other coefficients have a p-value less than 0.05. Therefore they are significant.
+
+```{r}
+plot(d1.jnj, col= "blue", main= " Johnson & Johnson stock prices (in blue) versus prices estimated with an ARIMA(0, 1, 3)")
+lines(fitted(fitb), col= "red")
+```
+
+### 4. Calculate the residual of the model, given as the difference between J&ˆ J and J&J. Compute the required quality checks on the residuals.
+
+>We choose to study the ARIMA(5, 1, 5) model because it seems graphically not to fit the prices well.:
+
+```{r}
+residuals <- fita$residuals
+```
+
+>Quality checks:
+>R²:
+
+```{r}
+rsquared <- R2(fita, d1.jnj)
+print(rsquared)
+```
+>RMSE:
+
+```{r}
+rmse <- RMSE(fita, d1.jnj)
+print(rmse)
+```
+>Let's now analyze the estimated residuals:
+
+```{r}
+qqnorm(fita$residuals)
+qqline(fita$residuals)
+```
+```{r}
+mean(fita$residuals)
+```
+>We can see that the mean is almost centered. Moreover, we observe on the graph that our residuals are normally distributed. So we can conclude that the estimated residuals are white noise.
+
+>Let us now check the autocorrelation of the estimated residuals:
+
+```{r}
+par(mfrow= c(1,2))
+acf(fita$residuals)
+pacf(fita$residuals)
+```
+>With these two graphs, we can see that the residuals are not autocorrelated. Let's check this with a Ljung Box test:
+
+```{r}
+Q_yt= matrix(data = 0, ncol= 2, nrow= 10)
+
+for(i in 1:10)
+{
+  Q_yt[i, 1]= Box.test(fita$residuals, lag= i, type= 'Ljung')$statistic
+  Q_yt[i,2]= Box.test(fita$residuals, lag= i, type= 'Ljung')$p.value
+  
+}
+plot(Q_yt[,2], main= "P-values of the Ljung Boxtest")
+```
+>We can observe that all our p-values are above the 0.05 threshold. Therefore, the residuals of the ARMA(4,4) model are not significantly different from an independent data set. Thus, the residuals are indeed without autocorrelation. Let us now check the stationarity:
+
+```{r}
+ADFr <- ur.df(fita$residuals)
+summary(ADFr)
+```
+>We can see that we have: Value of test-statistic= -12.2012 is lower than the associated critical values (-2.58 -1.95 -1.62). Thus the series of estimated residuals are stationary. Moreover, we had seen that the residuals are normally distributed. Thus, we can deduce that the variance is constant over time.
+
+>Then, we can conclude by saying that the ARIMA(5, 1, 5) model is a good model for estimating the Johnson & Johnson stock prices, according to our different metrics. We can therefore use this model to predict data.
+
+### 5. Using the estimated coefficients, generate a forecast over the next 3 months. Calculate the confidence interval of the forecasted points.
+
+```{r}
+fore <- forecast(fita, h= 3) #3 month predictions
+plot(fore)
+```
+>Predictions of the Johnson & Johnson stock prices over the next 3 months:
+
+```{r}
+print(fore)
+```
+>Confidence interval of the forecasted points:
+The gray area on the previous graph represents the confidence interval. But let's zoom in on it:
+
+```{r warning=FALSE}
+library(ggplot2)
+df_plot <- data.frame(fore)
+col <- c("limit of the confidence interval", "forecasted values")
+
+ggplot(df_plot, aes(x= seq(nrow(df_plot)), y= Point.Forecast)) +
+  geom_line(aes(y= Lo.95), color= 'red') +
+  geom_line(aes(y= Hi.95), color= 'red') +
+  geom_line(aes(y= Point.Forecast), col= 'blue') +
+  geom_point() +
+  ggtitle("95% Interval confidence of the forecast of \n the simulated ARMA with forecast function") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlab("Number of predicted values") + 
+  ylab("Estimated values")
+```
+>Values of confidence interval:
+
+```{r}
+cat("The confidence interval for the 1st prediction is: [", df_plot$Lo.95[1], ",", df_plot$Hi.95[1], "]")
+cat("\nThe confidence interval for the 1st prediction is: [", df_plot$Lo.95[2], ",", df_plot$Hi.95[2], "]")
+cat("\nThe confidence interval for the 1st prediction is: [", df_plot$Lo.95[1], ",", df_plot$Hi.95[3], "]")
+```
+>Back to the real data predictions:
+
+```{r}
+tsfit <- ts(cumsum(fore$fitted), start= c(1997, 01, 31), frequency= 12)
+
+plot(ts.jnj, col= "blue", main= "Real GDP (blue) vs Fitted values (red)")
+lines(tsfit, col= "red")
+```
+
+```{r}
+fitted <- fore$fitted
+fitpred <- fore$mean
+pred <- c(fitted, fitpred)
+cpred <- cumsum(pred)
+ts.cpred <- ts(cpred, start= c(1997, 01, 31), frequency= 12)
+plot(ts.jnj, main= "Fitted values by the ARIMA(5,1,5) and its predictions", col= "blue")
+lines(ts.cpred, col= "red")
+```
+>Predicted values:
+
+```{r}
+tail(ts.cpred, 3)
+```
+
+
+
+## *Exercise 5 : Unit root test another one*
+
+>In this exercise, we propose to introduce a new unit root test : the test of Zivot and Andrews (1992). On of the weakness of the ADF unit root tests is their potential confusion of structural breaks in the series as evidence of non-stationarity. In other words, they may fail to reject the unit root hypothesis if the series have a structural break.
+
+>Zivot and Andrews (1992) endogenous structural break test is a sequential test which utilizes the full sample and uses a different dummy variable for each possible break date. The break date is selected where the t-statistic from the ADF test of unit root is at a minimum (most negative). Consequently a break date will be chosen where the evidence is least favorable for the unit root null.
+
+>The Zivot-Andrews (1992) tests state the null hypothesis is that the series has a unit root with structural break(s) against the alternative hypothesis that they are stationary with break(s). We reject Null if tvalue statistic is lower than tabulated critical value.
+
+### 1. Present the Zivot and Andrews (1992) test paying attention to the nature of the breaks. Explain the strategy of the test.
+
+>The Zivot and Andrews (1992) test is a structure break test used in time series analysis to detect breaks in stationary time series. The test is based on comparing the estimation of the ARIMA model using an ordinary least squares (OLS) estimation method with that obtained using an estimation method robust to breaks in structure, such as generalized maximum likelihood (GML) estimation.
+>The strategy of the Zivot and Andrews test is to first estimate an ARIMA model using the OLS estimation method. Then, the test calculates the value of the Bayes Information Criterion (BIC) for this estimated model. The BIC is a statistical criterion that compares the quality of models based on the accuracy of the parameter estimation and the complexity of the model.
+>Next, the test also calculates the BIC value for an ARIMA model estimated using the GMM method. If the difference between the BIC values for the two models is significantly different, this indicates the presence of a structural break in the data. The Zivot and Andrews test uses a test statistic and critical values.
+
+### 2. Generate 3 new random walks. The first one is a pure random walk, the second is a random walk with a break in level and the third on will be a random walk with both a break in level and in the trend.
+
+```{r}
+set.seed(1)
+#Pure random walk
+rw1 <- cumsum(rnorm(100))
+
+#Random walk with a break in level 
+rw2 <- cumsum(rnorm(100))
+rw2[50:100] <- rw2[50:100] + 5
+
+#Random walk with both a break in level and in the trend
+rw3 <- cumsum(rnorm(100))
+rw3[50:100] <- rw3[50:100] + 5
+rw3 <- rw3 + 1:100
+```
+
+3. Compute the appropriate Zivot and Andrews (1992) test for the generated random walk. Summarize your output within a table.
+
+```{r}
+za1 <- ur.za(rw1)
+za2 <- ur.za(rw2, model= "intercept")
+za3 <- ur.za(rw3, model= "both")
+
+
+za1.stat <- za1@tstats
+za2.stat <- za2@tstats
+za3.stat <- za3@tstats
+
+table <- data.frame(za1.stat, za1.stat, za1.stat)
+colnames(table) <- c("rw1 test statistics", "rw2 test statistics", "rw3 test statistics")
+head(table)
+```
+
+```{r warning=FALSE}
+cvalues <- za1@cval #The critical values are the same (they are calculated for a confidence level)
+
+za1ts <- za1@teststat #=min(table$`rw1 test statistics`)
+za2ts <- za2@teststat
+za3ts <- za2@teststat
+
+cat("The critical values are:", cvalues)
+cat("\nrw1 test statistics:", za1ts)
+cat("\nrw2 test statistics:", za2ts)
+cat("\nrw3 test statistics:", za3ts)
+```
+>We can see that all test statistics are above the critical values. So we reject the null hypothesis. Thus, all the series are stationary (the alternative hypothesis that they are stationary).
+
+### 4. Is it relevant to use such test for the filtered retail sales. Justify. Compute the Zivot and Andrews (1992) unit root test using the US retail sales.
+
+>If the retail sales data have been filtered to eliminate trends or seasons, the Zivot-Andrews test may not be suitable for evaluating the null hypothesis of stationarity. In this case, it would be better to use another method.
+
+```{r}
+zars <- ur.za(wsea.rs, model= "trend")
+summary(zars)
+```
+>We can see that the test statistic is below the critical values. So we do not reject the null hypothesis. Thus,the series is not stationary.
+Let's do it again on the differencied one:
+
+```{r}
+zarsd <- ur.za(dt1.rs, model= "trend")
+summary(zarsd)
+```
+>We can see that the test statistic is much lower the critical values. So we do not reject the null hypothesis. Thus, the series is not stationary.
+
+
+
+## *Exercise 6 : Modeling the business cycle*
+
+>Based on all your knowledge, propose the most appropriate specification to model the quarterly US GDP dynamics. Produce a forecast of the US business cycle for the next three quarters. We are expecting a complete study with illustrating charts, detailed and motivated comments and relevant results.
+
+>Forecasting the evolution of the business cycle is a complex task that requires a thorough analysis of economic data and current economic trends. To model the quarterly US GDP dynamics, it is important to choose a model that captures the characteristics of the economic data.
+Let's start by importing the data and analyzing it:
+
+```{r warning=FALSE}
+gpd <- fred("GDP")
+head(gpd)
+```
+
+```{r}
+sum(rowSums(is.na(gpd))) #Number of rows with missing data
+```
+>We can see that the first data are missing (NA). We therefore choose to remove them from our dataset in order to study the quarterly US GDP dynamics.
+
+```{r}
+gpd <- gpd[5:nrow(gpd),]
+head(gpd)
+```
+
+>Let's convert the dataset into time series in order to model it by an ARMA(p,q) or ARIMA(p,d,q) model:
+
+```{r}
+ts.gdp <- ts(gpd$GDP, start= c(1948, 01), frequency= 4) #Units in billions of dollars
+ts.plot(ts.gdp)
+```
+
+>After checking the FRED website (https://fred.stlouisfed.org/series/GDP#0), we get the same time series as the data. Let's start by breaking down our series:
+>We can observe a strong increasing trend that seems to be deterministic. Graphically, the series does not seem to show any seasonality. Let's check:
+
+```{r}
+dec.gdp <- decompose(ts.gdp) 
+plot(dec.gdp)
+```
+>As we can see, the series seems to have too little seasonality to affect the series, but to be on the safe side, we will purge it of this seasonality:
+
+```{r}
+wsea.gdp <- seasadj(dec.gdp)
+plot(wsea.gdp)
+```
+>As expected, the seasonality of the series is not strong enough to affect the series. Let's move on to the stationarity test to find out which model to use to model our data:
+
+>Augmmented Dickey-Fuller test:
+
+```{r}
+ADF <- ur.df(wsea.gdp, type= "trend", lag= 1)
+summary(ADF)
+```
+>Let's see if we can find a more significant lag:
+
+```{r}
+ADF <- ur.df(wsea.gdp, type= "trend", lag= 2)
+summary(ADF)
+```
+
+>The p-value is lower than 0.05 and all the values of test-statistic are much higher than all the critical values. Then, we can reject the null hypothesis. Hence, the series is not stationary.
+
+>Phillips-Perron test:
+
+```{r}
+PP <- ur.pp(wsea.gdp, type= "Z-tau", model= "trend", use.lag= 2)
+summary(PP)
+```
+>The p-value is below 0.05. Moreover, we can see that the value of test-statistic is higher than all the critical values. Then, we reject the null hypothesis. Hence, the series is not stationary.
+
+>KPSS test:
+
+```{r}
+KPSS <- ur.kpss(wsea.gdp, type= "tau", use.lag= 2)
+summary(KPSS)
+```
+>Like the other two tests, our test statistic is larger than the critical values. So we reject H0. So the series is not stationary.
+>Since the time series is not stationary, we eliminate the ARMA(p,q) model and seek to model our data with an ARIMA(p,d,q) model. So let's start by looking for the degree of integration, i.e. the order of the difference filter applied to the series:
+
+>Augmmented Dickey-Fuller test:
+
+```{r}
+d1.gdp <- diff(wsea.gdp, differences= 1)
+
+ADF <- ur.df(d1.gdp,type= "trend", lag= 2)
+summary(ADF)
+```
+>The p-value is below 0.05 and we can see that the first test statistic value is smaller than the critical values. So we do not reject the null hypothesis. Inversely for the other two test statistics. So the series is stationary. 
+
+>Phillips-Perron test:
+
+```{r}
+PP <- ur.pp(d1.gdp, type= "Z-tau", model= "trend", use.lag= 2)
+summary(PP)
+```
+>The p-value is below 0.05. Moreover, we can see that the value of test-statistic is lower than all the critical values. Then, we do not reject the null hypothesis. Hence, the series is stationary. 
+
+>KPSS test:
+
+```{r}
+KPSS <- ur.kpss(d1.gdp, type= "tau", use.lag= 2)
+summary(KPSS)
+```
+>we can see that the value of test-statistic is lower than the critical values for a risk of 5%. Then, we do not reject the null hypothesis. Hence, the series is stationary for a risk of 5%.
+>So, as we have just seen with the different unit root tests, the first order difference filter is sufficient to stationarize the time series. Thus, the degree of integration d= 1. So we are looking for an ARIMA(p,1,q). Let us look for the best values of p and q:
+
+```{r}
+bestpqa <- BestARIMA(d1.gdp, "aic", 1, TRUE)
+bestpqb <- BestARIMA(d1.gdp, "bic", 1, TRUE)
+
+cat("\n With AIC:")
+cat("\n The value of p is:")
+print(bestpqa[1])
+cat("\n The value of q is:")
+print(bestpqa[2])
+cat("\n The corresponding AIC value is:")
+print(bestpqa[3])
+
+cat("\n With BIC:")
+cat("\n The value of p is:")
+print(bestpqb[1])
+cat("\n The value of q is:")
+print(bestpqb[2])
+cat("\n The corresponding BIC value is:")
+print(bestpqb[3])
+```
+>According to the AIC, we should choose an ARIMA(0,1,3) and according to the BIC, we should choose an ARIMA(0,1,1).
+
+>According to the AIC:
+
+```{r}
+fita <- arima(d1.gdp, order=c(0, 1, 3))
+summary(fita)
+```
+
+```{r}
+cat("p-values of all the coefficients for ARIMA(0, 1, 3): \n")
+round((1-pnorm(abs(fita$coef)/sqrt(diag(fita$var.coef))))*2, 4)
+```
+>All the coefficients have a p-value lower than 0.05 except the ma3 coefficient. Thus, ma1 and ma2 coefficient are significant.
+
+```{r}
+plot(d1.gdp, col= "blue", main= "US Gross Domestic Product (in blue) versus prices estimated with an ARIMA(0, 1, 3)")
+lines(fitted(fita), col= "red")
+```
+
+>According to the BIC:
+
+```{r}
+fitb <- arima(d1.gdp, order=c(0, 1, 1))
+summary(fitb)
+```
+```{r}
+cat("p-values of all the coefficients for ARIMA(0, 1, 1): \n")
+round((1-pnorm(abs(fitb$coef)/sqrt(diag(fitb$var.coef))))*2, 4)
+```
+>The only ma1 coefficient is significant.
+
+```{r}
+plot(d1.gdp, col= "blue", main= "US Gross Domestic Product (in blue) versus prices estimated with an ARIMA(0, 1, 1)")
+lines(fitted(fitb), col= "red")
+```
+>Let's try automatically:
+
+```{r}
+fitauto <- auto.arima(d1.gdp)
+summary(fitauto)
+```
+>So, we should estimate our series with an ARIMA(0,1,2) according the automatic function.
+
+```{r}
+cat("p-values of all the coefficients for ARIMA(0, 1, 2): \n")
+round((1-pnorm(abs(fitauto$coef)/sqrt(diag(fitauto$var.coef))))*2, 4)
+```
+>Only the ma2 coefficient is not significant because its p-value is higer than 0.05.
+
+```{r}
+plot(d1.gdp, col= "blue", main= "US Gross Domestic Product (in blue) versus prices estimated with an ARIMA(0, 1, 2)")
+lines(fitted(fitauto), col= "red")
+```
+>It is very difficult to choose the right ARIMA model. Let's compute the different metrics:
+
+>Quality checks:
+>R²:
+
+```{r}
+r2a <- R2(fita, d1.gdp)
+r2b <- R2(fitb, d1.gdp)
+r2auto <- R2(fitauto, d1.gdp)
+
+cat("The R² of the ARIMA(0, 1, 3):", r2a)
+cat("\nThe R² of the ARIMA(0, 1, 1):", r2b)
+cat("\nThe R² of the ARIMA(0, 1, 2):", r2auto)
+
+r2 <- c(r2a, r2b, r2auto)
+```
+>RMSE:
+
+```{r}
+rmsea <- RMSE(fita, d1.jnj)
+rmseb <- RMSE(fitb, d1.jnj)
+rmseauto <- RMSE(fitauto, d1.jnj)
+
+cat("The RMSE of the ARIMA(0, 1, 3):", rmsea)
+cat("\nThe RMSE of the ARIMA(0, 1, 1):", rmseb)
+cat("\nThe RMSE of the ARIMA(0, 1, 2):", rmseauto)
+
+rmse <- c(rmsea, rmseb, rmseauto)
+```
+>Let's now analyze the estimated residuals:
+
+```{r}
+par(mfrow= c(1,3))
+qqnorm(fita$residuals)
+qqline(fita$residuals)
+
+qqnorm(fitb$residuals)
+qqline(fitb$residuals)
+
+qqnorm(fitauto$residuals)
+qqline(fitauto$residuals)
+```
+>We notice that the residuals of each model are well normally distributed. Let's add this to our data frame and let's compute the average of ou residuals:
+
+```{r}
+qq <- rep(TRUE, 3)
+
+meana <- mean(fita$residuals)
+meanb <- mean(fitb$residuals)
+meanauto <- mean(fitauto$residuals)
+
+cat("The average of the ARIMA(0, 1, 3) residuals:", meana)
+cat("\nThe average of the ARIMA(0, 1, 1) residuals:", meanb)
+cat("\nThe average of the ARIMA(0, 1, 2) residuals:", meanauto)
+
+mean <- c(meana, meanb, meanauto)
+```
+>Let us now check the autocorrelation of the estimated residuals:
+
+```{r}
+par(mfrow= c(1,3))
+acf(fita$residuals)
+acf(fitb$residuals)
+acf(fitauto$residuals)
+```
+
+
+```{r}
+par(mfrow= c(1,3))
+pacf(fita$residuals)
+pacf(fitb$residuals)
+pacf(fitauto$residuals)
+```
+>With these graphs, we can see that the residuals of each model are not autocorrelated. Let's check this with a Ljung Box test:
+
+```{r}
+LjungTest <- function(fit){
+  
+  Q_yt= matrix(data = 0, ncol= 2, nrow= 10)
+  
+  for(i in 1:10)
+  {
+    Q_yt[i, 1]= Box.test(fit$residuals, lag= i, type= 'Ljung')$statistic
+    Q_yt[i,2]= Box.test(fit$residuals, lag= i, type= 'Ljung')$p.value
+  }
+  
+  return(Q_yt)
+}
+```
+
+```{r}
+LJta <- LjungTest(fita)
+LJtb <- LjungTest(fitb)
+LJtauto <- LjungTest(fitauto)
+
+par(mfrow= c(1,3))
+plot(LJta, main= "P-values of the Ljung Boxtest")
+plot(LJtb, main= "P-values of the Ljung Boxtest")
+plot(LJtauto, main= "P-values of the Ljung Boxtest")
+```
+>We can see that all the p-values of the Ljung-Boxtest of the ARIMA(0,1,3) are above 0.05. Therefore, the residuals of the ARMA(4,4) model are not significantly different from an independent data set. Thus, the residuals are indeed without autocorrelation. However, this is not the case for the other two models. Let's add this to our table of results and check the stationarity of the residuals:
+
+```{r}
+autocorel <- c(TRUE, FALSE, FALSE)
+
+ADFa <- ur.df(fita$residuals)
+ADFb <- ur.df(fitb$residuals)
+ADFauto <- ur.df(fitauto$residuals)
+
+summary(ADFa)
+```
+```{r}
+summary(ADFb)
+```
+```{r}
+summary(ADFauto)
+```
+>The p-values are lower than 0.05 and the values of the test-statistics are lower than the critical values for all the models. Then, we can't reject the null hypothesis and the series are stationary.
+
+>We create a dataframe to summaize our results and let's analyze them:
+
+```{r}
+statio <- rep(TRUE, 3)
+
+df <- data.frame(r2, rmse, qq, autocorel, statio)
+rownames(df) <- c("ARIMA(0,1,3)", "ARIMA(0,1,1)", "ARIMA(0,1,2)")
+df
+
+```
+>All metrics appear similar except for autocorrelation, which differs. Thus, by eliminating the last 2 models, we choose the model selected by the AIC: the ARIMA(0,1,3).
+>Let's now make a prediction for the next 3 quarters:
+
+```{r}
+fore <- forecast(fita, h= 3) #3 quarters predictions
+plot(fore)
+```
+>Predictions of the Johnson & Johnson stock prices over the next 3 quarters:
+
+```{r}
+print(fore)
+```
+
+>Confidence interval of the forecasted points:
+The gray area on the previous graph represents the confidence interval. But let's zoom in on it:
+
+```{r}
+df_plot <- data.frame(fore)
+col <- c("limit of the confidence interval", "forecasted values")
+
+ggplot(df_plot, aes(x= seq(nrow(df_plot)), y= Point.Forecast)) +
+  geom_line(aes(y= Lo.95), color= 'red') +
+  geom_line(aes(y= Hi.95), color= 'red') +
+  geom_line(aes(y= Point.Forecast), col= 'blue') +
+  geom_point() +
+  ggtitle("95% Interval confidence of the forecast of \n the simulated ARMA with forecast function") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlab("Number of predicted values") + 
+  ylab("Differencied values GDP")
+```
+>Values of confidence interval:
+
+```{r}
+cat("The confidence interval for the 1st prediction is between: [", df_plot$Lo.95[1], ",", df_plot$Hi.95[1], "]")
+cat("\nThe confidence interval for the 2nd prediction is between: [", df_plot$Lo.95[2], ",", df_plot$Hi.95[2], "]")
+cat("\nThe confidence interval for the 3rd prediction is between: [", df_plot$Lo.95[1], ",", df_plot$Hi.95[3], "]")
+```
+>Now let's go back to the original data: 
+
+```{r}
+tsfit <- ts(cumsum(fore$fitted), start= c(1948, 01), frequency= 4)
+
+plot(ts.gdp, col= "blue", main= "Real GDP (blue) vs Fitted values (red)")
+lines(tsfit, col= "red")
+```
+>Let's plot the forecasted values
+
+```{r}
+fitted <- fore$fitted
+fitpred <- fore$mean
+pred <- c(fitted, fitpred)
+cpred <- cumsum(pred)
+ts.cpred <- ts(cpred, start= c(1948, 01), frequency= 4)
+plot(ts.gdp, main= "Fitted values by the ARIMA(0,1,3) and its predictiojns", col= "blue")
+lines(ts.cpred, col= "red")
+```
+>Predicted values:
+
+```{r}
+tail(ts.cpred, 3)
+```
+>We can see that the predicted values for the next 3 quarters are consistent. Indeed, our model estimates the data relatively well. Thus we can predict that the US GDP values are:
+- Q3 2023: 20729.07
+- Q4 2023: 21041.40
+- Q1 2024: 21338.87
+
+>As mentioned earlier, it is very difficult to predict and estimate US Gross Domestic Product data. However, it is possible to estimate the values taken and predict the next values within a given confidence interval, as we have done throughout this TD. 
